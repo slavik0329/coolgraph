@@ -9,11 +9,11 @@ import ForceGraph3D, { ForceGraphMethods } from 'react-force-graph-3d'
 import { abi as EAS } from '@ethereum-attestation-service/eas-contracts/artifacts/contracts/EAS.sol/EAS.json'
 
 export default function ForceGraph() {
-  const rpc = 'https://rpc.sepolia.org'
+  const rpc = 'https://eth.merkle.io'
   const provider = new ethers.providers.StaticJsonRpcProvider(rpc)
-  const eas = new ethers.Contract('0xC2679fBD37d54388Ce493F1DB75320D236e1815e', EAS, provider)
+  const eas = new ethers.Contract('0xA7b39296258348C78294F95B872b282326A97BDF', EAS, provider)
 
-  const schema = '0x8af15e65888f2e3b487e536a4922e277dcfe85b4b18187b0cf9afdb802ba6bb6'
+  const schema = '0xc59265615401143689cbfe73046a922c975c99d97e4c248070435b1104b2dea7'
   const [graph, setGraph] = useState({ nodes: [], links: [] })
   const { refetch } = useQuery(
     gql`
