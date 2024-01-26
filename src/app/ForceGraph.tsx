@@ -1,95 +1,42 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { gql, useQuery } from '@apollo/client'
+import {useCallback, useEffect, useRef, useState} from 'react'
+import {gql, useQuery} from '@apollo/client'
 import SpriteText from 'three-spritetext'
 import * as THREE from 'three'
-import { ethers } from 'ethers'
-import ForceGraph3D, { ForceGraphMethods } from 'react-force-graph-3d'
-import { abi as EAS } from '@ethereum-attestation-service/eas-contracts/artifacts/contracts/EAS.sol/EAS.json'
+import {ethers} from 'ethers'
+import ForceGraph3D, {ForceGraphMethods} from 'react-force-graph-3d'
+import axios from 'axios'
+import {abi as EAS} from '@ethereum-attestation-service/eas-contracts/artifacts/contracts/EAS.sol/EAS.json'
 
+const frontendURL = 'http://localhost:3000'
+const baseURL = 'http://localhost:8080'
 export default function ForceGraph() {
   const rpc = 'https://eth.merkle.io'
   const provider = new ethers.providers.StaticJsonRpcProvider(rpc)
-  const eas = new ethers.Contract('0xA7b39296258348C78294F95B872b282326A97BDF', EAS, provider)
+  // const eas = new ethers.Contract('0xA7b39296258348C78294F95B872b282326A97BDF', EAS, provider)
 
-  const schema = '0xc59265615401143689cbfe73046a922c975c99d97e4c248070435b1104b2dea7'
-  const [graph, setGraph] = useState({ nodes: [], links: [] })
-  const { refetch } = useQuery(
-    gql`
-      query Query($where: AttestationWhereInput) {
-        attestations(where: $where) {
-          id
-          schemaId
-          attester
-          recipient
-          decodedDataJson
-        }
-      }
-    `,
-    {
-      variables: {
-        where: {
-          schemaId: {
-            equals: schema,
-          },
-          revoked: {
-            equals: false,
-          }
-        }
-      },
-      onCompleted: async (data) => {
-        const attestations = data.attestations
-          .map((attestation: any) => {
-            return {
-              ...attestation,
-              decodedDataJson: JSON.parse(attestation.decodedDataJson),
-            }
-          })
-          .filter((attestation: any) => {
-            return attestation.decodedDataJson[0].value.value = true
-          })
+  // const schema = '0xc59265615401143689cbfe73046a922c975c99d97e4c248070435b1104b2dea7'
+  const [graph, setGraph] = useState({nodes: [], links: []})
 
-        const addresses: Set<string> = attestations
-          .reduce(
-            (acc: Set<string>, attestation: any) => {
-              acc.add(attestation.recipient)
-              acc.add(attestation.attester)
-              return acc
-            }, new Set()
-          )
+  const [currentLink, setCurrentLink] = useState<any>(null);
 
-        setGraph({
-          nodes: [
-            ...Array.from(addresses).map((address: string) => {
-              return {
-                id: address,
-                name: address,
-                type: 'address'
-              }
-            }),
-          ] as any,
-          links: [
-            ...attestations.map((attestation: any) => {
-              return {
-                source: attestation.attester,
-                target: attestation.recipient,
-                type: attestation.schemaId,
-              }
-            }),
-          ] as any,
-        })
-      }
-    },
-  )
 
-  // Refetch on new attestations.
+  async function update() {
+    const graph = await axios.post<{ nodes: any[], links: any[] }>(`${baseURL}/getGraph`);
+    const nodes = graph.data.nodes.map(n => ({
+      ...n,
+      name: n.id,
+      type: 'address',
+      value: 10
+    }));
+
+    setGraph({nodes: nodes as any, links: graph.data.links as any});
+  }
+
   useEffect(() => {
-    // Add listener and remove it, idk what the rules are.
-    const listener = () => { refetch() }
-    eas.off('Attested', listener)
-    eas.on('Attested', listener)
-  }, [eas, refetch])
+    update()
+  }, [])
 
   // Load blockies.
   let blockies: any
@@ -98,10 +45,16 @@ export default function ForceGraph() {
   }
 
   // Generate one blockie to hack around a bug in the library.
-  blockies?.create({ seed: 'fixies!' })
+  blockies?.create({seed: 'fixies!'})
 
   // Open stuff on click.
-  const handleClick = useCallback((node: any) => {
+  const handleLinkClick = useCallback((link: any) => {
+    console.log('l',link)
+    setCurrentLink(link);
+  }, [])
+
+  // Open stuff on click.
+  const handleNodeClick = useCallback((node: any) => {
     if (node.type === 'address') {
       window.open(`https://etherscan.io/address/${node.id}`)
     }
@@ -109,23 +62,41 @@ export default function ForceGraph() {
 
   return (
     <main>
+      <div style={{backgroundColor: '#fff', width: 300, display: 'flex-box'}}>
+        <div>
+          {currentLink && (
+            <div>
+              <h2>Games played between {currentLink.source.id} and {currentLink.target.id}</h2>
+              {currentLink.games.map((game: any) => (
+                // eslint-disable-next-line react/jsx-key
+                <div onClick={() => {
+                  window.location.href = `${frontendURL}/challenge/${game}`
+                }}>
+                  Game UID {game}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
       <ForceGraph3D
         graphData={graph}
         nodeAutoColorBy="type"
         linkAutoColorBy="type"
-        linkWidth={0.2}
-        linkOpacity={0.5}
+        linkWidth={1}
+        linkOpacity={1}
         linkDirectionalArrowLength={3.5}
         linkDirectionalArrowRelPos={1}
         linkDirectionalParticles={1}
-        onNodeClick={handleClick}
+        onLinkClick={handleLinkClick}
+        onNodeClick={handleNodeClick}
         nodeThreeObject={(node: any) => {
           if (node.type === 'address') {
-            const icon = blockies?.create({ seed: node.id })
+            const icon = blockies?.create({seed: node.id})
             const data = icon?.toDataURL('image/png')
             const texture = new THREE.TextureLoader().load(data)
             texture.colorSpace = THREE.SRGBColorSpace
-            const material = new THREE.SpriteMaterial({ map: texture })
+            const material = new THREE.SpriteMaterial({map: texture})
             const sprite = new THREE.Sprite(material)
             sprite.scale.set(8, 8, 0)
             return sprite
